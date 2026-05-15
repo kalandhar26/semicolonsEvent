@@ -249,11 +249,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Create infra directories
+      - name: Verify infra structure
         run: |
-          mkdir -p infra/postgres infra/prometheus infra/grafana/provisioning
-          cp infra/postgres/init.sql infra/postgres/init.sql
-          cp infra/prometheus/prometheus.yml infra/prometheus/prometheus.yml
+          ls -la infra/postgres/init.sql
+          ls -la infra/prometheus/prometheus.yml
+          ls -la infra/grafana/provisioning/datasources/prometheus.yml
 
       - name: Start infra only (fast check)
         run: |

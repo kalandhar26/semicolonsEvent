@@ -148,6 +148,7 @@ services:
       - grafana_data:/var/lib/grafana
       - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./infra/grafana/datasources/prometheus.yml:/etc/grafana/provisioning/datasources:ro
     networks:
       - aiplatform
     healthcheck:
