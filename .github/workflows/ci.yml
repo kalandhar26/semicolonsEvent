@@ -13,9 +13,10 @@ on:
 env:
   JAVA_VERSION: '17'
   PYTHON_VERSION: '3.11'
-  NODE_VERSION: '18'
+  NODE_VERSION: '24'
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ${{ github.repository_owner }}/aiplatform
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
 
@@ -227,11 +228,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dashboard-build
-          path: dashboard/build/
+          path: aipredictordashboard/build/
           retention-days: 3
 
       - name: Build Docker image
-        working-directory: dashboard
+        working-directory: aipredictordashboard
         run: |
           docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-dashboard:${{ github.sha }} \
                        -t ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-dashboard:latest .
@@ -240,7 +241,7 @@ jobs:
   #  JOB 5 — Docker Compose Integration Smoke Test
   # ════════════════════════════════════════════════════════════════
   integration-test:
-    name: Integration — docker-compose smoke test
+    name: Integration — docker compose smoke test
     runs-on: ubuntu-latest
     needs: [ order-service, healing-service, ai-predictor, dashboard ]
 
@@ -256,7 +257,7 @@ jobs:
 
       - name: Start infra only (fast check)
         run: |
-          docker-compose up -d postgres zookeeper kafka prometheus
+          docker compose up -d postgres zookeeper kafka prometheus
           echo "Waiting for infra to be healthy..."
           sleep 30
 
@@ -267,19 +268,19 @@ jobs:
 
       - name: Check Kafka is up
         run: |
-          docker-compose exec -T kafka \
+          docker compose exec -T kafka \
             kafka-broker-api-versions --bootstrap-server localhost:9092 \
             && echo "✓ Kafka healthy"
 
       - name: Check Postgres is up
         run: |
-          docker-compose exec -T postgres \
+          docker compose exec -T postgres \
             pg_isready -U aiplatform -d aiplatform \
             && echo "✓ Postgres healthy"
 
       - name: Tear down
         if: always()
-        run: docker-compose down -v
+        run: docker compose down -v
 
   # ════════════════════════════════════════════════════════════════
   #  JOB 6 — Summary (runs last, shown on PR)
