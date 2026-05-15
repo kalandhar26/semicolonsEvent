@@ -92,11 +92,14 @@ ngrok http 3000
 
 Share the ngrok URL — all API proxying goes through nginx so no CORS issues.
 
-
-http://localhost:3000 - Dashboard
-
-http://localhost:9090 - Prometheus
-
-http://localhost:3001 - Grafana (admin/admin123)
-
-http://localhost:8000/docs - AI Predictor API
+| Service        | URL                                     | How to Test         |
+|----------------|-----------------------------------------|---------------------|
+| Dashboard      | `http://localhost:3000`                 | Open in browser     |
+| AI API Docs    | `http://localhost:8000/docs`            | Interactive Swagger |
+| AI Health      | `http://localhost:8000/health`          | curl command        |
+| AI Predict     | `http://localhost:8000/predict`         | curl command        |
+| Order Health   | `http://localhost:8081/actuator/health` | curl command        |
+| Order API      | `http://localhost:8081/orders`          | curl command        |
+| Healing Health | `http://localhost:8082/actuator/health` | curl command        |
+| Prometheus     | `http://localhost:9090`                 | Open in browser     |
+| Grafana        | `http://localhost:3001`                 | `admin / admin123`  |

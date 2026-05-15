@@ -7,7 +7,7 @@ spring:
 
   # ── PostgreSQL ────────────────────────────────────────────────────
   datasource:
-    url: jdbc:postgresql://localhost:5432/aiplatform
+    url: jdbc:postgresql://postgres:5432/aiplatform
     username: aiplatform
     password: aiplatform123
     driver-class-name: org.postgresql.Driver
@@ -25,7 +25,7 @@ spring:
 
   # ── Kafka ─────────────────────────────────────────────────────────
   kafka:
-    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    bootstrap-servers: kafka:9092
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -59,8 +59,8 @@ management:
 
 # ── App config ────────────────────────────────────────────────────
 app:
-  order-service-url: ${ORDER_SERVICE_URL:http://localhost:8081}
-  ai-predictor-url:  ${AI_PREDICTOR_URL:http://localhost:8000}
+  order-service-url: http://order-service:8080
+  ai-predictor-url: http://ai-predictor:8000
   healing:
     # Minimum seconds between two healing actions for the same service
     cooldown-seconds: 30

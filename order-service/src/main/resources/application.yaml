@@ -6,7 +6,7 @@ server:
   port: 8080
   # ── PostgreSQL ───────────────────────────────────────────────────
   datasource:
-    url: jdbc:postgresql://localhost:5432/aiplatform
+    url: jdbc:postgresql://postgres:5432/aiplatform
     username: aiplatform
     password: aiplatform123
     driver-class-name: org.postgresql.Driver
@@ -27,7 +27,7 @@ server:
   # ── Redis ────────────────────────────────────────────────────────
   data:
     redis:
-      host: localhost
+      host: redis
       port: 6379
       password: ${SPRING_REDIS_PASSWORD}
       timeout: 2000ms
@@ -38,7 +38,7 @@ server:
 
   # ── Kafka ────────────────────────────────────────────────────────
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: kafka:9092
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
