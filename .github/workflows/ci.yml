@@ -252,8 +252,8 @@ jobs:
       - name: Create infra directories
         run: |
           mkdir -p infra/postgres infra/prometheus infra/grafana/provisioning
-          cp init.sql infra/postgres/init.sql
-          cp prometheus.yml infra/prometheus/prometheus.yml
+          cp infra/postgres/init.sql infra/postgres/init.sql
+          cp infra/prometheus/prometheus.yml infra/prometheus/prometheus.yml
 
       - name: Start infra only (fast check)
         run: |
