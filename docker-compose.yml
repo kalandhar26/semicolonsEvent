@@ -178,12 +178,15 @@ services:
       SPRING_DATASOURCE_USERNAME: aiplatform
       SPRING_DATASOURCE_PASSWORD: aiplatform123
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_DATA_REDIS_HOST: redis # Updated for Spring Data Redis
       SPRING_REDIS_HOST: redis
-      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PORT: "6379"
       SPRING_REDIS_PASSWORD: redis123
+      
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,prometheus,metrics
       MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED: "true"
       MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED: "true"
+      MANAGEMENT_HEALTH_REDIS_ENABLED: "false"
     networks:
       - aiplatform
     healthcheck:

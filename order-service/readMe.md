@@ -103,3 +103,13 @@ Share the ngrok URL — all API proxying goes through nginx so no CORS issues.
 | Healing Health | `http://localhost:8082/actuator/health` | curl command        |
 | Prometheus     | `http://localhost:9090`                 | Open in browser     |
 | Grafana        | `http://localhost:3001`                 | `admin / admin123`  |
+
+
+1. "Our Order Service is a microservice processing orders"
+2. "The AI Predictor watches 6 metrics simultaneously"
+3. "When I inject failures, the AI detects it in seconds"
+4. "The Healing Service automatically opens the circuit breaker"
+5. "The Dashboard shows everything in real-time"
+6. "When I heal the service, recovery is automatic"
+7. "Zero human intervention needed - true self-healing"
+8. "Ollama provides AI-powered root cause analysis"
