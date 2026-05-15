@@ -1,0 +1,112 @@
+spring:
+  application:
+    name: order-service
+
+server:
+  port: 8080
+  # ── PostgreSQL ───────────────────────────────────────────────────
+  datasource:
+    url: jdbc:postgresql://localhost:5432/aiplatform
+    username: aiplatform
+    password: aiplatform123
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  # ── Redis ────────────────────────────────────────────────────────
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: ${SPRING_REDIS_PASSWORD}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          min-idle: 2
+
+  # ── Kafka ────────────────────────────────────────────────────────
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: "1"
+      retries: 3
+    consumer:
+      group-id: order-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.semicolon.order_service.*"
+
+# ── Actuator + Prometheus ────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,circuitbreakers
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+  health:
+    redis:
+      enabled: true
+    db:
+      enabled: true
+
+# ── Resilience4j Circuit Breaker ─────────────────────────────────
+resilience4j:
+  circuitbreaker:
+    instances:
+      orderProcessing:
+        # Opens when 50% of last 10 calls fail
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 80
+        slow-call-duration-threshold: 2s
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        # Stays open for 15s, then goes HALF_OPEN
+        wait-duration-in-open-state: 15s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        register-health-indicator: true
+  retry:
+    instances:
+      orderProcessing:
+        max-attempts: 3
+        wait-duration: 500ms
+
+# ── App-level config ──────────────────────────────────────────────
+app:
+  demo:
+    # Simulated failure mode — toggled via POST /demo/fail
+    failing: false
+    # Artificial delay added when failing (ms)
+    failure-latency-ms: 800
+  kafka:
+    topic:
+      orders: orders
+      alerts: anomaly-alerts

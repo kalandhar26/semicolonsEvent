@@ -1,0 +1,298 @@
+# ═══════════════════════════════════════════════════════════════════
+#  AI-Powered API Failure Prediction & Self-Healing Platform
+#  Hackathon docker-compose — all services, one command:
+#    docker-compose up --build
+# ═══════════════════════════════════════════════════════════════════
+
+version: "3.9"
+
+networks:
+  aiplatform:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
+  kafka_data:
+  redis_data:
+
+# ─────────────────────────────────────────────────────────────────────
+#  SERVICES
+# ─────────────────────────────────────────────────────────────────────
+services:
+
+  # ── 1. PostgreSQL ─────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: aiplatform-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aiplatform
+      POSTGRES_USER: aiplatform
+      POSTGRES_PASSWORD: aiplatform123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - aiplatform
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiplatform -d aiplatform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── 2. Redis (circuit breaker state store) ────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: aiplatform-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass redis123
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - aiplatform
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis123", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── 3. Zookeeper (required by Kafka) ─────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: aiplatform-zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - aiplatform
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── 4. Kafka ──────────────────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: aiplatform-kafka
+    restart: unless-stopped
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - aiplatform
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  # ── 5. Prometheus ─────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: aiplatform-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    networks:
+      - aiplatform
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── 6. Grafana ────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: aiplatform-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/aiplatform.json
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - aiplatform
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── 7. Order Service (Spring Boot — the one with the "bug") ───────
+  order-service:
+    build:
+      context: ./order-service
+      dockerfile: Dockerfile
+    container_name: aiplatform-order-service
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8081:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aiplatform
+      SPRING_DATASOURCE_USERNAME: aiplatform
+      SPRING_DATASOURCE_PASSWORD: aiplatform123
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PASSWORD: redis123
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,prometheus,metrics
+      MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED: "true"
+      MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED: "true"
+    networks:
+      - aiplatform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+
+  # ── 8. Healing Service (Spring Boot — triggers circuit breaker) ───
+  healing-service:
+    build:
+      context: ./healing-service
+      dockerfile: Dockerfile
+    container_name: aiplatform-healing-service
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+    ports:
+      - "8082:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aiplatform
+      SPRING_DATASOURCE_USERNAME: aiplatform
+      SPRING_DATASOURCE_PASSWORD: aiplatform123
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PASSWORD: redis123
+      AI_PREDICTOR_URL: http://ai-predictor:8000
+      ORDER_SERVICE_URL: http://order-service:8080
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,prometheus,metrics
+      MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED: "true"
+    networks:
+      - aiplatform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+
+  # ── 9. AI Predictor (Python FastAPI + scikit-learn) ───────────────
+  ai-predictor:
+    build:
+      context: ./ai-predictor
+      dockerfile: Dockerfile
+    container_name: aiplatform-ai-predictor
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    ports:
+      - "8000:8000"
+    environment:
+      PROMETHEUS_URL: http://prometheus:9090
+      ORDER_SERVICE_URL: http://order-service:8080
+      ANOMALY_THRESHOLD: "0.75"
+      POLL_INTERVAL_SECONDS: "10"
+    networks:
+      - aiplatform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── 10. React Dashboard ───────────────────────────────────────────
+  aipredictordashboard:
+    build:
+      context: ./aipredictordashboard
+      dockerfile: Dockerfile
+    container_name: aiplatform-dashboard
+    restart: unless-stopped
+    depends_on:
+      - order-service
+      - healing-service
+      - ai-predictor
+    ports:
+      - "3000:80"
+    environment:
+      REACT_APP_ORDER_SERVICE_URL: http://localhost:8081
+      REACT_APP_HEALING_SERVICE_URL: http://localhost:8082
+      REACT_APP_AI_PREDICTOR_URL: http://localhost:8000
+      REACT_APP_PROMETHEUS_URL: http://localhost:9090
+    networks:
+      - aiplatform
+
+  # ── 11. Ollama (optional LLM for root-cause explanation) ──────────
+  # REMOVE this block if your machine has < 8GB RAM or for faster startup
+  ollama:
+    image: ollama/ollama:latest
+    container_name: aiplatform-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./infra/ollama:/root/.ollama
+    networks:
+      - aiplatform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    # Uncomment to pull the model on first boot (requires internet):
+    # entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull llama3 && wait"]
